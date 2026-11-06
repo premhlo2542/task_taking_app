@@ -99,14 +99,18 @@ function cmp(a, b) {
   if (ka !== kb) return ka < kb ? -1 : 1;
   return (b.pri || 0) - (a.pri || 0) || a.created - b.created;
 }
-const isLate = t => !t.done && t.date && (t.date < todayStr() || (t.date === todayStr() && t.time && t.time < nowHM()));
+const endOf = t => t.endDate || t.date;
+const covers = (t, s) => !!t.date && t.date <= s && s <= endOf(t);
+const isLate = t => !t.done && t.date && (endOf(t) < todayStr() || (endOf(t) === todayStr() && !t.endDate && t.time && t.time < nowHM()));
 
 /* ───────── actions on data ───────── */
 function toggle(id) {
   const t = byId(id); if (!t) return;
   if (!t.done && t.repeat && t.date) {
     state.log.push({ id: t.id, d: todayStr() });
+    const span = t.endDate ? diffDays(t.endDate, t.date) : 0;
     t.date = nextDate(t.date, t.repeat); t.notified = 0;
+    if (t.endDate) t.endDate = addDays(t.date, span);
     (t.subs || []).forEach(s => s.d = false);
     toast(`ทำซ้ำ — รอบถัดไป ${rel(t.date)}`);
   } else if (!t.done) {
@@ -131,7 +135,10 @@ let lastTab = null;
 
 function row(t, showDate) {
   const cat = CAT[t.cat], late = isLate(t), subs = t.subs || [], sd = subs.filter(s => s.d).length, bits = [];
-  if (showDate && t.date) bits.push(`<span class="${late ? 'late' : ''}">${ic('cal')}${esc(rel(t.date))}</span>`);
+  if (t.endDate) {
+    const T = todayStr(), n = diffDays(t.endDate, t.date) + 1, cur = T >= t.date && T <= t.endDate ? ` · วันที่ ${diffDays(T, t.date) + 1}/${n}` : ` · ${n} วัน`;
+    bits.push(`<span class="${late ? 'late' : 'span'}">${ic('cal')}${esc(fShort.format(parse(t.date)))} – ${esc(fShort.format(parse(t.endDate)))}${cur}</span>`);
+  } else if (showDate && t.date) bits.push(`<span class="${late ? 'late' : ''}">${ic('cal')}${esc(rel(t.date))}</span>`);
   if (t.time) bits.push(`<span class="${late ? 'late' : ''}">${ic('clock')}${esc(t.time)}</span>`);
   if (cat) bits.push(`<span><i class="dot" style="background:${cat.color}"></i>${cat.name}</span>`);
   if (subs.length) bits.push(`<span>${ic('list')}${sd}/${subs.length}</span>`);
@@ -149,8 +156,8 @@ const empty = (icon, h, p) => `<div class="empty"><div class="big">${ic(icon)}</
 
 function viewToday() {
   const T = todayStr(), open = state.tasks.filter(t => !t.done).sort(cmp);
-  const late = open.filter(t => t.date && t.date < T);
-  const today = state.tasks.filter(t => t.date === T).sort(cmp);
+  const late = open.filter(t => t.date && endOf(t) < T);
+  const today = state.tasks.filter(t => covers(t, T)).sort(cmp);
   const soon = open.filter(t => t.date > T && t.date <= addDays(T, 7));
   const later = open.filter(t => t.date > addDays(T, 7));
   const nodate = open.filter(t => !t.date);
@@ -170,12 +177,16 @@ function viewToday() {
   ${!state.tasks.length ? empty('allok', 'ยังไม่มีงาน', 'แตะปุ่ม + เพื่อเริ่มจดงานแรกของคุณ') : (!today.length && !late.length && !soon.length && !later.length && !nodate.length ? empty('allok', 'ไม่มีงานค้าง', 'พักผ่อนได้เลย ✨') : '')}`;
 }
 
-function dayTasks(s) { return state.tasks.filter(t => t.date === s).sort(cmp); }
+function dayTasks(s) { return state.tasks.filter(t => covers(t, s)).sort(cmp); }
 function viewCalendar() {
   const ws = state.settings.weekStart, y = ui.month.getFullYear(), m = ui.month.getMonth();
   const off = (new Date(y, m, 1).getDay() - ws + 7) % 7, dim = new Date(y, m + 1, 0).getDate(), rows = Math.ceil((off + dim) / 7);
   const T = todayStr();
-  const map = {}; state.tasks.forEach(t => { if (t.date) (map[t.date] ||= []).push(t); });
+  const map = {};
+  state.tasks.forEach(t => {
+    if (!t.date) return;
+    for (let s = t.date, n = 0; s <= endOf(t) && n < 400; s = addDays(s, 1), n++) (map[s] ||= []).push(t);
+  });
   let cells = '';
   for (let i = 0; i < rows * 7; i++) {
     const d = new Date(y, m, 1 - off + i), s = ymd(d), ts = map[s] || [], open = ts.filter(t => !t.done);
@@ -203,7 +214,7 @@ function allList() {
   const groups = new Map();
   list.forEach(t => { const k = t.date || ''; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); });
   return [...groups].map(([k, ts]) => {
-    const late = k && k < todayStr() && ts.some(t => !t.done);
+    const late = ts.some(isLate);
     return `<section class="sec"><div class="sec-h ${late ? 'late' : ''}"><span>${k ? esc(rel(k)) : 'ไม่มีกำหนด'}</span><span class="n">${ts.length}</span></div><div class="card">${ts.map(t => row(t)).join('')}</div></section>`;
   }).join('');
 }
@@ -273,7 +284,14 @@ function buildStatic() {
   $('#f-cat').innerHTML = `<button type="button" class="chip" data-v="">ไม่ระบุ</button>` + CATS.map(c => `<button type="button" class="chip" data-v="${c.id}"><i class="dot" style="background:${c.color}"></i>${c.name}</button>`).join('');
   $('#f-quick').innerHTML = [['วันนี้', 0], ['พรุ่งนี้', 1], ['สัปดาห์หน้า', 7], ['ไม่กำหนด', null]].map(([n, v]) => `<button type="button" class="chip" data-q="${v}">${n}</button>`).join('');
 }
+function syncSpan() {
+  const s = $('#f-date').value, e = $('#f-end').value;
+  $('#f-end').min = s || '';
+  if (e && (!s || e <= s)) $('#f-end').value = e = '';
+  $('#f-span').textContent = s && e ? `ต่อเนื่อง ${diffDays(e, s) + 1} วัน (${fShort.format(parse(s))} – ${fShort.format(parse(e))})` : '';
+}
 function syncSheet() {
+  syncSpan();
   $('#f-pri').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.v === draft.pri));
   $('#f-cat').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === draft.cat));
   const d = $('#f-date').value, T = todayStr();
@@ -292,6 +310,7 @@ function openEditor(id, presetDate) {
   $('#f-title').value = t?.title || ''; $('#f-note').value = t?.note || '';
   $('#f-date').value = t ? t.date || '' : (presetDate ?? (ui.tab === 'calendar' ? ui.sel : todayStr()));
   $('#f-time').value = t?.time || '';
+  $('#f-end').value = t?.endDate || '';
   $('#f-repeat').value = t?.repeat || ''; $('#f-remind').value = t?.remind ?? '';
   $('#f-delete').hidden = !t;
   renderSubs(); syncSheet();
@@ -308,13 +327,20 @@ sheet.addEventListener('click', e => {
   const pri = e.target.closest('#f-pri button'); if (pri) { draft.pri = +pri.dataset.v; return syncSheet(); }
   const cat = e.target.closest('#f-cat button'); if (cat) { draft.cat = cat.dataset.v; return syncSheet(); }
   const q = e.target.closest('#f-quick button');
-  if (q) { $('#f-date').value = q.dataset.q === 'null' ? '' : addDays(todayStr(), +q.dataset.q); return syncSheet(); }
+  if (q) { $('#f-date').value = q.dataset.q === 'null' ? '' : addDays(todayStr(), +q.dataset.q); if (q.dataset.q === 'null') $('#f-end').value = ''; return syncSheet(); }
+  if (e.target.closest('#f-endclear')) { $('#f-end').value = ''; return syncSheet(); }
   const sub = e.target.closest('[data-sub]');
   if (sub) { const i = +sub.dataset.i; if (sub.dataset.sub === 'x') draft.subs.splice(i, 1); else draft.subs[i].d = !draft.subs[i].d; return renderSubs(); }
   if (e.target.closest('#f-addsub')) { draft.subs.push({ id: uid(), t: '', d: false }); renderSubs(); return $('#f-subs').querySelector('.sub:last-child .sub-in').focus(); }
   if (e.target.closest('#f-delete')) { const id = editingId; closeSheet(); setTimeout(() => remove(id), 60); }
 });
 $('#f-date').addEventListener('input', syncSheet);
+$('#f-end').addEventListener('input', () => {
+  const s = $('#f-date').value, e = $('#f-end').value;
+  if (e && !s) $('#f-date').value = todayStr();
+  if (e && $('#f-date').value > e) { $('#f-end').value = ''; toast('วันสิ้นสุดต้องหลังวันเริ่ม'); }
+  syncSheet();
+});
 $('#f-subs').addEventListener('input', e => { if (e.target.matches('.sub-in')) draft.subs[+e.target.dataset.i].t = e.target.value; });
 $('#f-subs').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('.sub-in')) { e.preventDefault(); $('#f-addsub').click(); } });
 
@@ -326,7 +352,8 @@ form.addEventListener('submit', e => {
   const repeat = $('#f-repeat').value, remind = $('#f-remind').value;
   if (!date && (repeat || remind !== '' || time)) { date = todayStr(); toast('ตั้งวันที่เป็นวันนี้ให้อัตโนมัติ'); }
   const subs = draft.subs.filter(s => s.t.trim()).map(s => ({ ...s, t: s.t.trim() }));
-  const data = { title, note: $('#f-note').value.trim(), date, time, pri: draft.pri, cat: draft.cat, subs, repeat, remind };
+  let endDate = $('#f-end').value; if (!date || endDate <= date) endDate = '';
+  const data = { title, note: $('#f-note').value.trim(), date, endDate, time, pri: draft.pri, cat: draft.cat, subs, repeat, remind };
   if (editingId) {
     const t = byId(editingId); const resched = t.date !== date || t.time !== time || t.remind !== remind;
     Object.assign(t, data); if (resched) t.notified = 0;
@@ -416,7 +443,7 @@ function importData() {
       const ids = new Set(state.tasks.map(t => t.id)); let n = 0;
       d.tasks.forEach(t => {
         if (!t || typeof t.title !== 'string') return;
-        const clean = { id: String(t.id || uid()), title: t.title.slice(0, 200), note: String(t.note || '').slice(0, 2000), date: /^\d{4}-\d{2}-\d{2}$/.test(t.date) ? t.date : '', time: /^\d{2}:\d{2}$/.test(t.time) ? t.time : '', pri: [0, 1, 2, 3].includes(t.pri) ? t.pri : 0, cat: CAT[t.cat] ? t.cat : '', done: !!t.done, doneAt: +t.doneAt || 0, subs: Array.isArray(t.subs) ? t.subs.map(s => ({ id: String(s.id || uid()), t: String(s.t || '').slice(0, 200), d: !!s.d })) : [], repeat: ['daily', 'weekday', 'weekly', 'monthly'].includes(t.repeat) ? t.repeat : '', remind: t.remind === '' || t.remind == null ? '' : String(t.remind), created: +t.created || Date.now(), notified: 0 };
+        const clean = { id: String(t.id || uid()), title: t.title.slice(0, 200), note: String(t.note || '').slice(0, 2000), date: /^\d{4}-\d{2}-\d{2}$/.test(t.date) ? t.date : '', endDate: /^\d{4}-\d{2}-\d{2}$/.test(t.endDate) && /^\d{4}-\d{2}-\d{2}$/.test(t.date) && t.endDate > t.date ? t.endDate : '', time: /^\d{2}:\d{2}$/.test(t.time) ? t.time : '', pri: [0, 1, 2, 3].includes(t.pri) ? t.pri : 0, cat: CAT[t.cat] ? t.cat : '', done: !!t.done, doneAt: +t.doneAt || 0, subs: Array.isArray(t.subs) ? t.subs.map(s => ({ id: String(s.id || uid()), t: String(s.t || '').slice(0, 200), d: !!s.d })) : [], repeat: ['daily', 'weekday', 'weekly', 'monthly'].includes(t.repeat) ? t.repeat : '', remind: t.remind === '' || t.remind == null ? '' : String(t.remind), created: +t.created || Date.now(), notified: 0 };
         const i = state.tasks.findIndex(x => x.id === clean.id);
         if (i >= 0) state.tasks[i] = clean; else state.tasks.push(clean);
         ids.add(clean.id); n++;

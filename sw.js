@@ -1,4 +1,4 @@
-const CACHE = 'tasknote-v1';
+const CACHE = 'tasknote-v2';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
@@ -13,7 +13,7 @@ self.addEventListener('activate', e => {
   );
 });
 
-// stale-while-revalidate สำหรับไฟล์ของแอพ
+// stale-while-revalidate for app files
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
@@ -37,3 +37,4 @@ self.addEventListener('notificationclick', e => {
     })
   );
 });
+
