@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TaskNote – จดบันทึกงาน</title>
+<meta name="description" content="จดบันทึกงาน กำหนดการ และปฏิทิน ใช้งานออฟไลน์ได้">
+<meta name="theme-color" content="#f4f5f9" id="themeColor">
+<meta name="color-scheme" content="light dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="จดงาน">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell">
+  <main id="app" class="app" tabindex="-1"></main>
+
+  <nav class="tabbar" id="tabbar" aria-label="เมนูหลัก"></nav>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <!-- Task editor (bottom sheet) -->
+  <div id="sheet" class="sheet" hidden>
+    <div class="scrim" data-close></div>
+    <form class="panel" id="form" autocomplete="off" novalidate role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+      <div class="grab"></div>
+      <div class="sheet-head">
+        <button type="button" class="link" data-close>ยกเลิก</button>
+        <h2 id="sheetTitle">งานใหม่</h2>
+        <button type="submit" class="link strong">บันทึก</button>
+      </div>
+      <div class="sheet-body">
+        <input id="f-title" class="big-input" type="text" placeholder="ต้องทำอะไร?" maxlength="200" enterkeyhint="done">
+        <textarea id="f-note" rows="2" placeholder="รายละเอียด / โน้ต" maxlength="2000"></textarea>
+
+        <div class="field">
+          <label>กำหนดวัน</label>
+          <div class="chips" id="f-quick"></div>
+          <div class="row2">
+            <input id="f-date" type="date" aria-label="วันที่">
+            <input id="f-time" type="time" aria-label="เวลา">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>ความสำคัญ</label>
+          <div class="seg" id="f-pri"></div>
+        </div>
+
+        <div class="field">
+          <label>หมวดหมู่</label>
+          <div class="chips" id="f-cat"></div>
+        </div>
+
+        <div class="row2">
+          <div class="field">
+            <label for="f-repeat">ทำซ้ำ</label>
+            <select id="f-repeat">
+              <option value="">ไม่ทำซ้ำ</option>
+              <option value="daily">ทุกวัน</option>
+              <option value="weekday">จันทร์–ศุกร์</option>
+              <option value="weekly">ทุกสัปดาห์</option>
+              <option value="monthly">ทุกเดือน</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-remind">แจ้งเตือน</label>
+            <select id="f-remind">
+              <option value="">ไม่เตือน</option>
+              <option value="0">ตรงเวลา</option>
+              <option value="5">ก่อน 5 นาที</option>
+              <option value="10">ก่อน 10 นาที</option>
+              <option value="30">ก่อน 30 นาที</option>
+              <option value="60">ก่อน 1 ชั่วโมง</option>
+              <option value="1440">ก่อน 1 วัน</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>งานย่อย</label>
+          <div id="f-subs" class="subs"></div>
+          <button type="button" class="ghost-btn" id="f-addsub">+ เพิ่มงานย่อย</button>
+        </div>
+
+        <button type="button" class="danger-btn" id="f-delete" hidden>ลบงานนี้</button>
+      </div>
+    </form>
+  </div>
+</div>
+<noscript><p style="padding:24px">ต้องเปิดใช้งาน JavaScript เพื่อใช้แอพนี้</p></noscript>
+<script src="app.js"></script>
+</body>
+</html>
